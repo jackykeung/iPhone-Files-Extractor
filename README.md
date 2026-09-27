@@ -1,5 +1,7 @@
 # iPhone Files Extractor
 
+**v1.1.0** · [CHANGELOG](CHANGELOG.md)
+
 Reconstruct the **iPhone Files app** folder tree — On My iPhone, AirDropped Inbox,
 iCloud Drive (locally synced), and the `.Trash` recovery folders — from an
 **unencrypted** Apple iPhone (Finder/iTunes) backup.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-iPhone Files Extractor  v1.0
-============================
+iPhone Files Extractor  v1.1.0
+==============================
 Reconstruct the iPhone **Files app** folder tree (On My iPhone, iCloud Drive,
 AirDropped Inbox, Trash) from an UNENCRYPTED Apple iPhone (Finder/iTunes) backup.
 
@@ -57,6 +57,8 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
+__version__ = "1.1.0"
+
 # Manifest flags -> filesystem type.  1=file 2=directory 4=symlink 10=hardlink.
 _FLAG_MAP = {1: "file", 2: "directory", 4: "symlink", 10: "hardlink"}
 
