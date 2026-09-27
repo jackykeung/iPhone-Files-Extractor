@@ -323,7 +323,9 @@ def read_smartfolders(backup_dir, conn):
             "SELECT fileID FROM Files WHERE domain=? AND relativePath LIKE '%smartfolders.db'",
             ("AppDomainGroup-group.com.apple.DocumentManager",))
         for r in rows:
-            src = Path(backup_dir) / src_path(r["fileID"])
+            # Access by index so this works whether or not the connection
+            # has row_factory=Row set.
+            src = Path(backup_dir) / src_path(r[0])
             if src.is_file():
                 db = sqlite3.connect(f"file:{src}?mode=ro", uri=True)
                 # Folder titles typically in a Z*FOLDER/ZTITLE table; best effort.
@@ -342,7 +344,7 @@ def read_smartfolders(backup_dir, conn):
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
+def main(argv=None):
     ap = argparse.ArgumentParser(description="Reconstruct the iPhone Files app tree from an unencrypted backup.")
     ap.add_argument("--backup", required=True, help="iOS backup dir (contains Manifest.db)")
     ap.add_argument("-o", "--output", required=True, help="Output directory")
@@ -354,7 +356,7 @@ def main():
     ap.add_argument("--link", action="store_true", help="Hardlink instead of copy (saves disk; dest on same filesystem)")
     ap.add_argument("--workers", type=int, default=os.cpu_count() or 4)
     ap.add_argument("--dry-run", action="store_true", help="Scan and report only")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     backup_dir = Path(args.backup).expanduser()
     out_dir = Path(args.output).expanduser()
