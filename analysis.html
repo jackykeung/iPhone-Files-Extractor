@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>iPhone Files Extractor — Technique Analysis</title>
+<style>
+  :root{--bg:#0f1115;--card:#171a21;--ink:#e6e8ee;--dim:#9aa3b2;--acc:#4f9cf9;--ok:#3fc98a;--warn:#e5b567;--line:#262b36}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.6 -apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;padding:40px 22px}
+  .wrap{max-width:980px;margin:0 auto}h1{font-size:30px;margin:0 0 6px}h2{font-size:21px;margin:34px 0 10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  h3{font-size:16px;margin:20px 0 6px;color:var(--acc)}p{margin:8px 0;color:var(--dim)}code{background:#12151c;border:1px solid var(--line);border-radius:5px;padding:1px 6px;font:13px ui-monospace,SFMono-Regular,Menlo,monospace;color:#ffd479}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin:16px 0}
+  table{border-collapse:collapse;width:100%;margin:14px 0}th,td{border:1px solid var(--line);padding:9px 12px;text-align:left;font-size:14px}th{background:#12151c;color:var(--acc)}
+  .tag{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;margin-right:6px}.ok{background:rgba(63,201,138,.15);color:var(--ok)}.warn{background:rgba(229,181,103,.15);color:var(--warn)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}.stat b{font-size:26px;color:var(--acc);display:block}.stat span{font-size:13px;color:var(--dim)}
+  ul{color:var(--dim);padding-left:22px}li{margin:5px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>iPhone Files Extractor — Technique Analysis</h1>
+  <p style="color:var(--dim)">A survey of existing iOS-backup extraction projects, the shared algorithm they all use, and how our own Python tool improves it.</p>
+
+  <div class="grid">
+    <div class="stat"><b>6</b><span>projects surveyed &amp; cloned</span></div>
+    <div class="stat"><b>1</b><span>shared core algorithm</span></div>
+    <div class="stat"><b>4</b><span>Files-app domains</span></div>
+    <div class="stat"><b>6</b><span>improvements made</span></div>
+  </div>
+
+  <h2>1. The Files-app problem</h2>
+  <div class="card">
+    <p>Unlike WhatsApp (one app group) or Photos (one <code>CameraRollDomain</code>), the iPhone <b>Files app</b> aggregates storage that lives across <b>four separate backup domains</b>. A tool that only extracts one domain will show you a fragment of what you actually see on the phone.</p>
+    <table>
+      <tr><th>What you see in Files</th><th>Backup domain</th><th>Relative path</th></tr>
+      <tr><td>📥 AirDropped / Inbox</td><td><code>AppDomain-com.apple.DocumentsApp</code></td><td><code>Documents/Inbox/</code></td></tr>
+      <tr><td>🗂 On My iPhone (local)</td><td><code>AppDomainGroup-group.com.apple.FileProvider.LocalStorage</code></td><td><code>File Provider Storage/</code></td></tr>
+      <tr><td>🗑 Deleted On-My-iPhone</td><td>same</td><td><code>File Provider Storage/.Trash/</code></td></tr>
+      <tr><td>📑 Folder index</td><td><code>AppDomainGroup-group.com.apple.DocumentManager</code></td><td><code>smartfolders.db</code></td></tr>
+      <tr><td>☁️ iCloud Drive (local)</td><td><code>HomeDomain</code></td><td><code>Library/Mobile Documents/com~apple~CloudDocs/</code></td></tr>
+      <tr><td>🗑 Deleted iCloud Drive</td><td>same</td><td><code>com~apple~CloudDocs/.Trash/</code></td></tr>
+    </table>
+    <p><b>Gap identified:</b> every existing tool is a generic <em>single-domain</em> extractor (you pick the domain) or a photo/WhatsApp-specialised tool. <b>None</b> reconstructs the user-visible Files tree across all four domains. That is the value our project adds.</p>
+  </div>
+
+  <h2>2. Projects surveyed</h2>
+  <div class="card">
+    <table>
+      <tr><th>Project</th><th>Lang</th><th>Approach</th><th>Notes</th></tr>
+      <tr><td><b>greatvovan/ios-backup-browser</b></td><td>Python</td><td>Library+CLI, domain/namespace/path filters, proper bplist parse</td><td>Closest model; dependency-free, MIT</td></tr>
+      <tr><td><b>unixzii/ibackupextractor</b></td><td>Rust</td><td>Virtual <code>FileSystemIndex</code> tree, <code>--link</code> hardlink mode</td><td>Most-polished generic extractor</td></tr>
+      <tr><td><b>akiomik/idig</b></td><td>Rust</td><td>Search/extract by domain &amp; path, DDD layering</td><td>Nice filters, no Files awareness</td></tr>
+      <tr><td><b>richinfante/iphonebackuptools</b></td><td>Node</td><td>Report/extract CLI with <code>--filter</code> / <code>--regex-filter</code></td><td>JS, regex source filtering</td></tr>
+      <tr><td><b>conorarmstrong/iphone_extract_backup</b></td><td>Python</td><td>Simplest: copy every <code>fileID[:2]/fileID</code> to its rel path</td><td>85 lines; serial; no metadata</td></tr>
+      <tr><td><b>vgmoose/OpenBackupExtractor</b></td><td>macOS GUI</td><td>GUI extractor, voicemail-focused</td><td>Not CLI, not Files-aware</td></tr>
+    </table>
+  </div>
+
+  <h2>3. The shared algorithm (common pattern)</h2>
+  <div class="card">
+    <p>Every tool, regardless of language, converges on the same 4 steps:</p>
+    <ol>
+      <li><b>Open <code>Manifest.db</code></b> (read-only), read the <code>Files</code> table: <code>fileID, domain, relativePath, flags, file</code>.</li>
+      <li><b>Map <code>flags</code> to a filesystem type:</b> <code>1=file, 2=directory, 4=symlink, 10=hardlink</code>.</li>
+      <li><b>Resolve the payload</b> at <code>&lt;backup&gt;/&lt;fileID[:2]&gt;/&lt;fileID&gt;</code>.</li>
+      <li><b>Reconstruct the output tree</b> from <code>domain / namespace / relativePath</code>, then copy each payload there (restoring dates from the binary plist).</li>
+    </ol>
+    <p>For the Files app specifically, you then <b>aggregate the four domains</b> under one output root.</p>
+    <h3>Metadata (the tricky part)</h3>
+    <p>The <code>file</code> column is a <b>binary plist</b> of NSKeyed-archiver objects. The useful values live in <code>$objects[1]</code>: <code>Birth</code>, <code>LastModified</code>, <code>Size</code>, and <code>Target</code> (a <code>UID</code> reference for symlinks). All timestamps are in <b>Apple epoch</b> (seconds since 2001-01-01), so add <code>978307200</code> to get Unix.</p>
+    <p class="tag ok">correct</p><code>plistlib.loads(blob, fmt=FMT_BINARY)</code> — the right approach (used by greatvovan). Some tools skip metadata entirely (conorarmstrong) or do a fragile byte-scan (the photo tool's first cut).</p>
+  </div>
+
+  <h2>4. Weaknesses in the existing tools</h2>
+  <div class="card">
+    <ul>
+      <li><span class="tag warn">serial</span><b>Serial copy.</b> Nearly all copy one file at a time (conorarmstrong, greatvovan, richinfante). For a multi-GB Files tree this is slow.</li>
+      <li><span class="tag warn">no resume</span><b>No incremental resume or dedupe.</b> A re-run re-copies everything; overlapping domains re-copy shared bytes.</li>
+      <li><span class="tag warn">no empty dirs</span><b>Directory entries dropped.</b> Most tools skip <code>flags==2</code>, so genuinely empty folders are lost (unixzii, conorarmstrong).</li>
+      <li><span class="tag warn">dir mtime</span><b>Directory mtime set too early.</b> greatvovan correctly postpones it; the others would reset the dir time after children are written.</li>
+      <li><span class="tag warn">single domain</span><b>No Files-app awareness.</b> None aggregate the four Files domains into one readable tree.</li>
+      <li><span class="tag warn">symlink copy</span><b>Symlinks treated as files</b> (default) — fine for content, but the target reference is lost.</li>
+    </ul>
+  </div>
+
+  <h2>5. How our tool improves on them</h2>
+  <div class="card">
+    <table>
+      <tr><th>Improvement</th><th>Detail</th></tr>
+      <tr><td><b>Parallel copy</b></td><td><code>ProcessPoolExecutor</code> over N workers (default CPU count); MB/s throughput in the summary.</td></tr>
+      <tr><td><b>Incremental + dedupe</b></td><td>Skips an output file whose size matches the source (never re-copy / overwrite).</td></tr>
+      <tr><td><b>Proper bplist parse</b></td><td><code>plistlib</code> object-graph walk for <code>Birth</code>/<code>LastModified</code>/<code>Size</code>/<code>Target</code>.</td></tr>
+      <tr><td><b>Preserve empty dirs</b></td><td>Keeps <code>flags==2</code> entries so empty folders survive.</td></tr>
+      <tr><td><b>Dir mtime postponed</b></td><td>Sets directory timestamps after all children are written.</td></tr>
+      <tr><td><b>Files-domain aggregation</b></td><td><code>--local-only</code> / <code>--domain</code> / <code>--flat</code>; labelled output folders (On My iPhone, Inbox, iCloud Drive).</td></tr>
+      <tr><td><b>Trash recovery</b></td><td>Keeps <code>.Trash</code> folders so "deleted" items the user thought were gone are recoverable.</td></tr>
+      <tr><td><b>Duplicate-name safe</b></td><td>Colliding filenames get a <code>(n)</code> suffix instead of overwriting.</td></tr>
+    </table>
+  </div>
+
+  <h2>6. Verified behaviour</h2>
+  <div class="card">
+    <p>Validated against a synthetic multi-domain backup (4 domains, files + a directory entry + a hardlink-type entry + duplicate filenames + two <code>.Trash</code> folders):</p>
+    <ul>
+      <li>All 4 Files domains aggregated and extracted.</li>
+      <li>Full path preservation incl. <code>File Provider Storage/</code> + <code>.Trash</code>.</li>
+      <li>9 files byte-identical to source payloads (SHA-256 content match).</li>
+      <li>Creation/modification dates restored correctly (Apple epoch handled once).</li>
+      <li>Duplicate <code>report.pdf</code> disambiguated across folders.</li>
+      <li><code>--link</code> creates true hardlinks (same inode as source).</li>
+      <li><code>--local-only</code> restricts to the two on-device domains; <code>--flat</code> drops the labelled top folder.</li>
+    </ul>
+  </div>
+
+  <p style="text-align:center;color:var(--dim);margin-top:30px">Built for Jacky Keung · MIT · Independent, auditable Python tool</p>
+</div>
+</body>
+</html>
